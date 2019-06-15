@@ -1,109 +1,65 @@
+
+var capturer = new CCapture( { format: 'webm' } );
+
 const gpu = new GPU({
     mode: 'webgl2',
     canvas: document.getElementById('ctx')
 });
 
-
-
-const renderMandelbrot = gpu.createKernel(function(max_iter, colors, zoom, x_offset, y_offset, x_pan, y_pan, image){
-    var x = 0;
-    var y = 0;
-    var xx = 0;
-    var yy = 0;
-    var xy = 0;
+const render = gpu.createKernel(function(max_iter, colors, zoom, x_offset, y_offset, x_pan, y_pan, image, y_image, x_image, julia_mode, julia_c1, julia_c2){
+    var x = 0.0;
+    var y = 0.0;
+    var xx = 0.0;
+    var yy = 0.0;
+    var xy = 0.0;
 
     var c1 = (1/zoom)*(float(this.thread.x) + x_offset + x_pan);
     var c2 = (1/zoom)*(float(this.thread.y) + y_offset - y_pan);
 
-    var i = 0;
-    this.color(0, 0, 0, 0);
-    while(i<max_iter){
-        xy = x*y;
-        xx = x*x;
-        yy = y*y;
-        if((xx + yy) >= 4.0){
-            this.color(colors[i][0], colors[i][1], colors[i][2], 0);
-            break;
-        }
-        x = xx - yy + c1;
-        y = 2*xy + c2;
-        i++;
+    if(julia_mode>0){
+        x = c1;
+        y = c2;
+        c1 = julia_c1;
+        c2 = julia_c2;
     }
-}).setGraphical(true).setOutput([512, 512]);
-
-const renderPointOrbitTrap = gpu.createKernel(function(max_iter, colors, zoom, x_offset, y_offset, x_pan, y_pan, image, s){
-    var x = 0;
-    var y = 0;
-    var xx = 0;
-    var yy = 0;
-    var xy = 0;
-
-    var c1 = (1/zoom)*(float(this.thread.x) + x_offset + x_pan);
-    var c2 = (1/zoom)*(float(this.thread.y) + y_offset - y_pan);
 
     var i = 0;
-    this.color(0, 0, 0, 0);
-
+    this.color(colors[max_iter][0],colors[max_iter][1],colors[max_iter][2]);
+    var flag = 0;
     while(i<max_iter){
-        xy = x*y;
         xx = x*x;
         yy = y*y;
-        if((xx + yy) >= 4.0){
-            this.color(colors[i][0], colors[i][1], colors[i][2],1);
+        if((xx + yy) > 4.0){
+            if(flag<1){
+                this.color(colors[i][0], colors[i][1], colors[i][2],1);
+            }
             break;
         }
+        xy = x*y;
+
         x = xx - yy + c1;
-        y = 2*xy + c2;
+        y = xy+xy + c2;
         if(x> 0. && x <= 1 && y>0.0 && y<=1){
-            var ypos = Math.floor((y-0.)*s);
-            var xpos = Math.floor((x-0.)*s);
-            this.color(image[ypos][xpos][0],image[ypos][xpos][1],image[ypos][xpos][2],0)
+            var ypos = Math.floor(y*y_image);
+            var xpos = Math.floor(x*x_image);
+            // Check for opacity
+            if(image[ypos][xpos][3]>0){
+                this.color(image[ypos][xpos][0],image[ypos][xpos][1],image[ypos][xpos][2],0)
 
-            break;
+                flag = 1;
+            }
         }
         i++;
     }
-}).setGraphical(true).setOutput([512, 512]);
+}).setGraphical(true).setOutput([1920, 1080]);
 
-const renderPointOrbitTrapJulia = gpu.createKernel(function(max_iter, colors, zoom, x_offset, y_offset, x_pan, y_pan, image, s){
-    var x = (1/zoom)*(float(this.thread.x) + x_offset + x_pan);
-    var y = (1/zoom)*(float(this.thread.y) + y_offset - y_pan);
-    var xx = 0;
-    var yy = 0;
-    var xy = 0;
+let max_iter = 50;
 
-    var c1 = -0.8;
-    var c2 = 0.156;
-
-    var i = 0;
-    this.color(0, 0, 0);
-
-    while(i<max_iter){
-        xy = x*y;
-        xx = x*x;
-        yy = y*y;
-        if((xx + yy) >= 4.0){
-            this.color(colors[i][0], colors[i][1], colors[i][2],0);
-            break;
-        }
-        x = xx - yy + c1;
-        y = 2*xy + c2;
-        if(x> 0. && x <= 1 && y>0. && y<=1){
-            var ypos = Math.floor((y-0.)*s);
-            var xpos = Math.floor((x-0.)*s);
-            this.color(image[ypos][xpos][0],image[ypos][xpos][1],image[ypos][xpos][2],0)
-            break;
-        }
-        i++;
-    }
-}).setGraphical(true).setOutput([512, 512]);
-
-let max_iter = 500;
 
 var colors = [];
 
 for(var i = 0; i<max_iter; i++){
-    color = d3.color(d3.interpolateSinebow(i/max_iter));
+    color = d3.color(d3.interpolateMagma(i/max_iter));
     // color = d3.color(d3.interpolateWarm(i/max_iter));
     colors.push([color.r/255.0, color.g/255.0, color.b/255.0]);
 }
@@ -114,15 +70,15 @@ var ctx = canvas.getContext("2d");
 canvas.addEventListener("mousedown", onMouseDown);
 
 // Width and height of the image
-var imagew = 512.0;
-var imageh = 512.0;
+var imagew = 1920.0;
+var imageh = 1080.0;
 
 // Pan and zoom parameters
-var offsetx = -imagew/2;
-var offsety = -imageh/2;
-var panx = -100;
-var pany = 0;
-var zoom = 150;
+var offsetx = -imagew/2.0;
+var offsety = -imageh/2.0;
+var panx = -100.0;
+var pany = 0.0;
+var zoom = 150.0;
 
 function zoomFractal(x, y, factor, zoomin) {
     if (zoomin) {
@@ -149,45 +105,54 @@ function onMouseDown(e) {
         }
 
         // Pan with Shift
-        var zoomfactor = 2;
+        var zoomfactor = 2.0;
         if (e.shiftKey) {
-            zoomfactor = 1;
+            zoomfactor = 1.0;
         }
 
         // Zoom the fractal at the mouse position
         zoomFractal(pos.x, pos.y, zoomfactor, zoomin);
 
         // Generate a new image
+        console.log('zoom events')
         requestAnimationFrame(draw);
     }
 }
 
-function demo(){
-    var tmpcanvas = document.createElement('canvas');
+// function demo(w, h){
+//     var tmpcanvas = document.createElement('canvas');
+//
+//     // Get rid of this
+//     tmpcanvas.width = w;
+//     tmpcanvas.height = h;
+//
+//     var tmpcontext = tmpcanvas.getContext('2d');
+//     tmpcontext.drawImage(image, 0, 0);
+//
+//     var input = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+//
+//     var inputData = input.data;
+//
+//     im = [];
+//
+//     for (var y = 0; y < input.height; y++) {
+//         im.push([]);
+//         for (var x = 0; x < input.width; x++) {
+//             var i = (y*input.width + x)*4;
+//             im[y].push([inputData[i]/255.0, inputData[i+1]/255.0, inputData[i+2]/255.0, inputData[i+3]/255.0]);
+//        }
+//    }
+//
+//    requestAnimationFrame(draw);
+// }
 
-    tmpcanvas.width = 540;
-    tmpcanvas.height = 540;
-
-    var tmpcontext = tmpcanvas.getContext('2d');
-    tmpcontext.drawImage(image, 0, 0);
-
-    var input = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
-    console.log(input)
-
-    var inputData = input.data;
-
-    im = [];
-
-    for (var y = 0; y < input.height; y++) {
-        im.push([]);
-        for (var x = 0; x < input.width; x++) {
-            var i = (y*input.width + x)*4;
-            im[y].push([inputData[i]/255.0, inputData[i+1]/255.0, inputData[i+2]/255.0, inputData[i+3]/255.0]);
-       }
-   }
-
-   requestAnimationFrame(draw);
-}
+// var im;
+// var image = new Image();
+// image.onload = function(){
+//         demo( this.width, this.height);
+//     };
+// // image.onload = demo(this.height, this.width);
+// image.src = "benoit2.png";
 
 function getMousePos(canvas, e) {
     var rect = canvas.getBoundingClientRect();
@@ -197,13 +162,186 @@ function getMousePos(canvas, e) {
     };
 }
 
+var col = [0,0,0];
+var itercol = max_iter - 1;
+
 function draw(){
-    console.log(im);
-    //renderPointOrbitTrap(max_iter, colors, zoom, offsetx, offsety, panx, pany, image);
-    renderPointOrbitTrapJulia(max_iter, colors, zoom, offsetx, offsety, panx, pany, im, 540);
+    console.log(sequence.length, iter, iter % sequence.length)
+    im = sequence[iter % sequence.length];
+
+    if(iter==total_steps){
+        iter = 0;
+        c1 = c1target;
+        c2 = c2target;
+        c1target = Math.random()*4 - 2;
+        c2target = Math.random()*4 - 2;
+        dist = Math.sqrt((c1-c1target)**2 + (c2-c2target)**2);
+        total_steps = Math.floor(48*dist)
+    }
+    var currentc1 = c1target*(iter/total_steps) + c1*(total_steps-iter)/total_steps;
+    var currentc2 = c2target*(iter/total_steps) + c2*(total_steps-iter)/total_steps;
+
+    var tempcol1 = colors[itercol];
+
+    if(iter%2==0){
+        var color = colors.shift();
+        colors.push(color);
+    }
+    colors[itercol] = col;
+
+    var y_image = im.length;
+    var x_image = im[0].length;
+    render(max_iter, colors, zoom, offsetx, offsety, panx, pany, im, y_image, x_image, 0, currentc1, currentc2);
+
+    colors[itercol] = tempcol1;
+    // if(iter%2==0){
+    //     itercol = itercol + 1;
+    // }
+    if(iter%2==0){
+        itercol = itercol - 1;
+    }
+
+    // if(itercol == max_iter - 1){
+    //     itercol = 0;
+    // }
+
+    if(itercol == 1){
+        itercol = 49;
+    }
+
+    iter = iter + 1;
+    requestAnimationFrame(draw);
+    if(capturer){
+         capturer.capture(canvas);
+    }
 }
 
-var im;
-var image = new Image();
-image.onload = demo;
-image.src = "color.jpg";
+var c1 = Math.random()*4 -2;
+var c2 = Math.random()*4 -2;
+var c1target = Math.random()*4 -2;
+var c2target = Math.random()*4 -2;
+
+var iter = 0;
+var total_steps = 24;
+
+var sequence = [];
+document.getElementById('video_selector').addEventListener('change', extractFrames, false);
+document.getElementById('photo_selector').addEventListener('change', extractPhoto, false);
+
+function extractPhoto(){
+    var image = new Image();
+
+    function demo(w, h){
+        console.log(w)
+        var tmpcanvas = document.createElement('canvas');
+
+        // Get rid of this
+        tmpcanvas.width = w;
+        tmpcanvas.height = h;
+
+        var tmpcontext = tmpcanvas.getContext('2d');
+        tmpcontext.drawImage(image, 0, 0);
+
+        var input = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+
+        var inputData = input.data;
+
+        im = [];
+
+        for (var y = 0; y < input.height; y++) {
+            im.push([]);
+            for (var x = 0; x < input.width; x++) {
+                var i = (y*input.width + x)*4;
+                im[y].push([inputData[i]/255.0, inputData[i+1]/255.0, inputData[i+2]/255.0, inputData[i+3]/255.0]);
+           }
+       }
+
+       requestAnimationFrame(draw);
+    }
+    image.addEventListener('loadedmetadata', demo(this.width, this.height), false);
+
+    image.src = URL.createObjectURL(this.files[0]);
+}
+
+function extractFrames() {
+  var video = document.createElement('video');
+  var array = [];
+
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var pro = document.querySelector('#progress');
+
+  function initCanvas(e) {
+    canvas.width = this.videoWidth;
+    canvas.height = this.videoHeight;
+  }
+
+  function drawFrame(e) {
+    this.pause();
+    ctx.drawImage(this, 0, 0);
+    /*
+    this will save as a Blob, less memory consumptive than toDataURL
+    a polyfill can be found at
+    https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob#Polyfill
+    */
+    canvas.toBlob(saveFrame, 'image/jpeg');
+
+    pro.innerHTML = ((this.currentTime / this.duration) * 100).toFixed(2) + ' %';
+    if (this.currentTime < this.duration) {
+      this.play();
+    }
+  }
+
+  function saveFrame(blob) {
+    array.push(blob);
+  }
+
+  function revokeURL(e) {
+    var tmpcanvas = document.createElement('canvas');
+    tmpcanvas.width = this.width;
+    tmpcanvas.height = this.height;
+
+    var tmpcontext = tmpcanvas.getContext('2d');
+    tmpcontext.drawImage(this, 0, 0);
+
+    var input = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+    var inputData = input.data;
+
+    var im = [];
+
+    for (var y = 0; y < input.height; y++) {
+        im.push([]);
+        for (var x = 0; x < input.width; x++) {
+            var i = (y*input.width + x)*4;
+            im[y].push([inputData[i]/255.0, inputData[i+1]/255.0, inputData[i+2]/255.0, inputData[i+3]/255.0]);
+       }
+   }
+
+    sequence.push(im);
+    URL.revokeObjectURL(this.src);
+    console.log('req')
+    requestAnimationFrame(draw);
+  }
+
+  function onend(e) {
+      console.log('poep')
+     console.log(array.length)
+    var img;
+
+    for (var i = 0; i < array.length; i++) {
+      img = new Image();
+      img.onload = revokeURL;
+      img.src = URL.createObjectURL(array[i]);
+    }
+
+    URL.revokeObjectURL(this.src);
+  }
+
+  video.muted = true;
+  video.addEventListener('loadedmetadata', initCanvas, false);
+  video.addEventListener('timeupdate', drawFrame, false);
+  video.addEventListener('ended', onend, false);
+
+  video.src = URL.createObjectURL(this.files[0]);
+  video.play();
+}

@@ -8,13 +8,19 @@
         <meta name="description" content="Fractal flame renderer">
 
         <link href=""./style.css" rel="stylesheet" type="text/css">
+        <script src="ffmpegserver.min.js"></script>
+        <script src="CCapture.all.min.js"></script>
         <script src="gpu-browser.js"></script>
+
         <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.2/d3.js"></script>
 
         <title>Fractal GPU render</title>
     </head>
     <body>
         <canvas id="ctx"></canvas>
+        <input id="video_selector" type="file" accept="video/*" />
+        <p id="progress"></p>
+        <input id="photo_selector" type="file" accept="image/*" />
     </body>
     <script src="script.js"></script>
 </html>

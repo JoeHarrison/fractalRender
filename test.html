@@ -1,42 +1,93 @@
-<!DOCTYPE HTML>
-<html lang="en">
- <head>
-  <title>Edge detection demo</title>
-  <script>
-   var image = new Image();
-   function init() {
-     image.onload = demo;
-     image.src = "2.png";
-   }
-   function demo() {
-     var canvas = document.createElement('canvas');
-     canvas.width = 2;
-     canvas.height = 2;
-     var context = canvas.getContext('2d');
+<html>
+    <head>
+    </head>
+    <body>
+        <input type="file" accept="video/*" />
+        <p id="progress"></p>
+    </body>
+    <script>
+        document.querySelector('input').addEventListener('change', extractFrames, false);
 
-     // draw the image onto the canvas
-     context.drawImage(image, 0, 0);
+        function extractFrames() {
+          var video = document.createElement('video');
+          var array = [];
+          var sequence = [];
+          var canvas = document.createElement('canvas');
+          var ctx = canvas.getContext('2d');
+          var pro = document.querySelector('#progress');
 
-     // get the image data to manipulate
-     var input = context.getImageData(0, 0, canvas.width, canvas.height);
+          function initCanvas(e) {
+            canvas.width = this.videoWidth;
+            canvas.height = this.videoHeight;
+          }
 
-     h = input.height;
-     var inputData = input.data;
+          function drawFrame(e) {
+            this.pause();
+            ctx.drawImage(this, 0, 0);
+            /*
+            this will save as a Blob, less memory consumptive than toDataURL
+            a polyfill can be found at
+            https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob#Polyfill
+            */
+            canvas.toBlob(saveFrame, 'image/jpeg');
 
-     var im = [];
+            pro.innerHTML = ((this.currentTime / this.duration) * 100).toFixed(2) + ' %';
+            if (this.currentTime < this.duration) {
+              this.play();
+            }
+          }
 
-     for (var y = 0; y < input.height; y++) {
-         im.push([]);
-         for (var x = 0; x < input.width; x++) {
-             var i = (y*input.width + x)*4;
-             im[y].push([inputData[i], inputData[i+1], inputData[i+2], inputData[i+3]]);
+          function saveFrame(blob) {
+            array.push(blob);
+          }
+
+          function revokeURL(e) {
+            var tmpcanvas = document.createElement('canvas');
+            tmpcanvas.width = this.width;
+            tmpcanvas.height = this.height;
+
+            var tmpcontext = tmpcanvas.getContext('2d');
+            tmpcontext.drawImage(this, 0, 0);
+
+            var input = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+            var inputData = input.data;
+
+            var im = [];
+
+            for (var y = 0; y < input.height; y++) {
+                im.push([]);
+                for (var x = 0; x < input.width; x++) {
+                    var i = (y*input.width + x)*4;
+                    im[y].push([inputData[i]/255.0, inputData[i+1]/255.0, inputData[i+2]/255.0, inputData[i+3]/255.0]);
+               }
+           }
+
+            sequence.push(im);
+            console.log(sequence);
+            URL.revokeObjectURL(this.src);
+          }
+
+          function onend(e) {
+
+            var img;
+            // do whatever with the frames
+            for (var i = 0; i < 10; i++) {
+              img = new Image();
+              img.onload = revokeURL;
+              img.src = URL.createObjectURL(array[i]);
+            }
+
+            URL.revokeObjectURL(this.src);
+          }
+
+          video.muted = true;
+
+          video.addEventListener('loadedmetadata', initCanvas, false);
+          video.addEventListener('timeupdate', drawFrame, false);
+          video.addEventListener('ended', onend, false);
+
+          video.src = URL.createObjectURL(this.files[0]);
+          video.play();
         }
-    }
-
-   }
-  </script>
- </head>
- <body onload="init()">
-  <canvas></canvas>
- </body>
+    </script>
 </html>
